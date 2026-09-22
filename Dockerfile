@@ -1,32 +1,22 @@
-# ---- 构建阶段 ----
-FROM node:22-alpine AS builder
-WORKDIR /app
+FROM nginx:alpine
+LABEL maintainer="LibreTV Team"
+LABEL description="LibreTV - 免费在线视频搜索与观看平台"
 
-COPY package.json package-lock.json* ./
-RUN npm ci --no-audit --no-fund
+# 复制应用文件
+COPY . /usr/share/nginx/html
 
-COPY . .
-ENV DOCKER_BUILD=1
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# 添加执行权限并设置为入口点脚本
+COPY docker-entrypoint.sh /
+RUN chmod +x /docker-entrypoint.sh
 
-# ---- 运行阶段 ----
-FROM node:22-alpine AS runner
-WORKDIR /app
+# 暴露端口
+EXPOSE 80
 
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=8080
-ENV HOSTNAME=0.0.0.0
+# 设置入口点
+ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# 非 root 用户
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+# 启动nginx
+CMD ["nginx", "-g", "daemon off;"]
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-
-USER nextjs
-
-EXPOSE 8080
-CMD ["node", "server.js"]
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
